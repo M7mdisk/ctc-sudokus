@@ -16,6 +16,9 @@
   --cyan:      #22d3ee;
   --new:       #fb7185;
   --ok:        #34d399;
+  --d-medium:  #60a5fa;
+  --d-hard:    #fbbf24;
+  --d-vhard:   #fb7185;
   --warn:      #fbbf24;
   --shadow:    0 10px 30px -12px rgba(0,0,0,.8);
   --r:         14px;
@@ -40,6 +43,9 @@ html[data-theme="light"] {
   --cyan:      #0891b2;
   --new:       #e11d48;
   --ok:        #059669;
+  --d-medium:  #2563eb;
+  --d-hard:    #b45309;
+  --d-vhard:   #e11d48;
   --shadow:    0 10px 30px -14px rgba(16,19,26,.28);
   color-scheme: light;
 }
@@ -266,6 +272,11 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   color: var(--bg);
   flex: 0 0 auto;
 }
+.diff { font-weight: 600; letter-spacing: -.01em; }
+.diff[data-d="EASY"] { color: var(--ok); }
+.diff[data-d="MEDIUM"] { color: var(--d-medium); }
+.diff[data-d="HARD"] { color: var(--d-hard); }
+.diff[data-d="VERY HARD"] { color: var(--d-vhard); }
 .solver.S { background: color-mix(in srgb, var(--cyan) 85%, white); }
 .solver.M { background: color-mix(in srgb, var(--warn) 90%, white); }
 

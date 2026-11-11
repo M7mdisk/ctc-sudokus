@@ -9,10 +9,11 @@ progressive web app and refreshed automatically.
 ## What it does
 
 - **All ~3,500 puzzles** in one searchable list: title, setter, publish date,
-  whether Simon or Mark solved it on the channel, and inferred constraint tags
-  (fog, thermo, arrow, killer, whisper, …).
-- **Filters** by constraint, setter, and play state (new / unplayed / in
-  progress / solved / favourites), plus sort by date, name or setter.
+  whether Simon or Mark solved it on the channel, the site's own difficulty
+  rating, and inferred constraint tags (fog, thermo, arrow, killer, whisper, …).
+- **Filters** by constraint, setter, difficulty (easy / medium / hard / very
+  hard) and play state (new / unplayed / in progress / solved / favourites),
+  plus sort by date, name or setter.
 - **Play** without leaving the app: each puzzle opens in an embedded
   SudokuPad player (the same engine the official site uses), with the rules
   text and links to the original page and the video solve.
@@ -26,7 +27,7 @@ progressive web app and refreshed automatically.
 ## How it works
 
 ```
-scripts/scrape.py  ->  data/puzzles.json      index (id, date, name, setter, variant, solver, pad id, tags)
+scripts/scrape.py  ->                       data/puzzles.json      index (id, date, name, setter, variant, solver, pad id, tags, difficulty)
                        data/rules.json        rules text per puzzle, fetched lazily by the player
                        data/progress.json     which puzzle pages have been read (keeps daily runs to 1 request)
 index.html app.js styles.css sw.js manifest.webmanifest icons/
@@ -34,12 +35,14 @@ index.html app.js styles.css sw.js manifest.webmanifest icons/
 
 `scrape.py` is stdlib-only Python: it reads the ordered puzzle list from
 `/sudokus`, then fetches each `/sudoku?id=N` page once for the setter, app
-variant, SudokuPad id and rules. Runs are incremental — a daily refresh costs
-a couple of HTTP requests when nothing has been published.
+variant, SudokuPad id and rules. Difficulty comes from the site's own rating —
+four requests to `/filter?difficultyfilter=…`, one per level, which covers every
+rated puzzle at once (three puzzles have no rating). Runs are incremental — a
+daily refresh costs six HTTP requests when nothing has been published.
 
 `scripts/refresh.sh` does the daily scrape + commit; `scripts/github-workflow.yml` is the
-same thing packaged for GitHub Actions.
-changed; GitHub Pages serves `main` from the repository root.
+same thing packaged for GitHub Actions. GitHub Pages serves `main` from the
+repository root.
 
 ## Refresh automation
 

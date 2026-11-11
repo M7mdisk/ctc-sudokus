@@ -26,6 +26,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from html import unescape
@@ -171,6 +172,9 @@ HEADLINE = re.compile(r"^Sudoku is (?P<name>.+?) by (?P<author>.+?)(?:, App vari
 SETTER_IN_TITLE = re.compile(r"^(?P<name>.*?)\s*\((?P<author>[^()]+)\)\s*$")
 PAD_URL = re.compile(r"^https?://sudokupad\.app/([A-Za-z0-9][A-Za-z0-9._/-]*)")
 RULES_NOISE = re.compile(r"prefer to play directly in sudokupad", re.I)
+DIFFICULTY_LEVELS = ("EASY", "MEDIUM", "HARD", "VERY HARD")
+DIFFICULTY_URL = BASE + "/filter?filter=ALL&difficultyfilter={}&filtertext="
+PUZZLE_ID = re.compile(r"sudoku\?id=(\d+)")
 
 # Constraint tags inferred from the published rules text. Order matters: earlier
 # tags win when the display is truncated by count.
@@ -264,7 +268,7 @@ def load_previous() -> dict[int, dict]:
         blob = json.loads(path.read_text("utf-8"))
     except Exception:  # noqa: BLE001
         return {}
-    keys = ("id", "date", "name", "author", "variant", "solver", "pad", "tags")
+    keys = ("id", "date", "name", "author", "variant", "solver", "pad", "tags", "diff")
     out = {}
     for row in blob.get("items", []):
         rec = dict(zip(keys, row))
@@ -282,6 +286,23 @@ def load_progress() -> tuple[set[int], int]:
         return {int(i) for i in blob.get("done", [])}, int(blob.get("v", 0))
     except Exception:  # noqa: BLE001
         return set(), 0
+
+
+def fetch_difficulty() -> dict[int, str]:
+    """Cracking the Cryptic's own difficulty rating: 4 filtered index pages.
+
+    Authoritative (set by the site) and cheap - four requests, and it covers
+    every rated puzzle at once. Three puzzles carry no rating at all.
+    """
+    out: dict[int, str] = {}
+    for level in DIFFICULTY_LEVELS:
+        html = fetch(DIFFICULTY_URL.format(urllib.parse.quote(level)))
+        if not html:
+            continue
+        for pid in PUZZLE_ID.findall(html):
+            out[int(pid)] = level
+        print(f"  difficulty {level}: {sum(1 for v in out.values() if v == level)}")
+    return out
 
 
 def write_progress_files(rules: dict[int, str], progress: set[int]) -> None:
@@ -306,6 +327,7 @@ def write_outputs(rows: list[dict], rules: dict[int, str], progress: set[int]) -
             r.get("solver"),
             r.get("pad"),
             len(r.get("tags") or []) and (r["tags"] if isinstance(r["tags"], str) else " ".join(r["tags"])) or "",
+            r.get("diff"),
         ]
         for r in rows
     ]
@@ -350,6 +372,10 @@ def main() -> int:
     parser.feed(index_html)
     entries = [e for e in parser.items if e["id"]]
     print(f"index: {len(entries)} puzzles")
+
+    print("GET difficulty ratings")
+    difficulty = fetch_difficulty()
+    print(f"  rated: {len(difficulty)}/{len(entries)}")
 
     previous = {} if args.full else load_previous()
     progress, stored_version = (set(), 0) if args.full else load_progress()
@@ -399,6 +425,7 @@ def main() -> int:
             if not rec["author"]:
                 rec["author"] = tm.group("author").strip()
         rec["tags"] = derive_tags(detail.get("rules"), rec["name"], rec.get("variant"))
+        rec["diff"] = difficulty.get(rec["id"])
         with lock:
             if detail.get("rules"):
                 rules[rec["id"]] = detail["rules"]
@@ -442,6 +469,7 @@ def main() -> int:
             if rec["id"] in rules:
                 rec["tags"] = derive_tags(rules[rec["id"]], rec.get("name"), rec.get("variant"))
             rec["tags"] = rec.get("tags") or []
+        rec["diff"] = difficulty.get(rec["id"])
         rows.append(rec)
 
     write_outputs(rows, rules, progress)

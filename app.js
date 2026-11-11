@@ -32,6 +32,7 @@ const state = {
   q: '',
   tags: new Set(store.get('f.tags', [])),
   author: store.get('f.author', ''),
+  diff: store.get('f.diff', ''),
   status: store.get('f.status', 'all'),
   sort: store.get('f.sort', 'newest'),
   view: [],          // filtered
@@ -45,7 +46,7 @@ const $ = (sel) => document.querySelector(sel);
 const el = {
   list: $('#list'), count: $('#countLine'), sync: $('#syncLine'),
   q: $('#q'), clearQ: $('#clearQ'), chips: $('#tagChips'),
-  author: $('#authorSel'), status: $('#statusSel'), sort: $('#sortSel'),
+  author: $('#authorSel'), status: $('#statusSel'), sort: $('#sortSel'), diff: $('#diffSel'),
   reset: $('#resetBtn'), reset2: $('#resetBtn2'), empty: $('#empty'),
   sentinel: $('#sentinel'), wrap: $('.list-wrap'),
   player: $('#player'), pad: $('#pad'), stageNote: $('#stageNote'),
@@ -95,7 +96,8 @@ async function load() {
     solver: r[5] || '',
     pad: r[6] || '',
     tags: (r[7] || '').split(' ').filter(Boolean),
-    search: [r[2], r[3], r[4], (r[7] || '')].join(' ').toLowerCase(),
+    diff: r[8] || '',
+    search: [r[2], r[3], r[4], (r[7] || ''), (r[8] || '')].join(' ').toLowerCase(),
   }));
 
   state.items = items;
@@ -114,6 +116,7 @@ async function load() {
   el.dataStamp.textContent = `Index built ${state.generated ? new Date(state.generated).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'} · ${num(items.length)} puzzles`;
   buildChips();
   buildAuthors();
+  buildDifficulty();
   apply();
   routeFromHash();
 }
@@ -133,6 +136,7 @@ function passes(it, { ignoreTags = false, ignoreStatus = false } = {}) {
     for (const token of state.q.split(/\s+/)) if (token && !it.search.includes(token)) return false;
   }
   if (state.author && it.author !== state.author) return false;
+  if (state.diff && it.diff !== state.diff) return false;
   if (!ignoreTags) for (const t of state.tags) if (!it.tags.includes(t)) return false;
   if (!ignoreStatus) {
     switch (state.status) {
@@ -174,12 +178,23 @@ function buildAuthors() {
   el.author.value = state.author;
 }
 
+function buildDifficulty() {
+  const counts = new Map();
+  for (const it of state.items) if (it.diff) counts.set(it.diff, (counts.get(it.diff) || 0) + 1);
+  el.diff.innerHTML = '<option value="">Any</option>' + ['EASY', 'MEDIUM', 'HARD', 'VERY HARD']
+    .filter((d) => counts.has(d))
+    .map((d) => `<option value="${d}">${diffLabel(d)} (${counts.get(d)})</option>`)
+    .join('');
+  el.diff.value = state.diff;
+}
+
 function syncFilterControls() {
-  const dirty = state.tags.size > 0 || state.author || state.status !== 'all' || state.q;
+  const dirty = state.tags.size > 0 || state.author || state.diff || state.status !== 'all' || state.q;
   el.reset.hidden = !dirty;
   el.status.value = state.status;
   el.sort.value = state.sort;
   el.author.value = state.author;
+  el.diff.value = state.diff;
   el.clearQ.hidden = !state.q;
 }
 
@@ -205,6 +220,7 @@ function apply() {
 }
 
 const GENERIC_VARIANT = new Set(['OTHER', 'CLASSIC', 'LINE', 'DOMINO']);
+const diffLabel = (d) => (d === 'VERY HARD' ? 'Very hard' : d.charAt(0) + d.slice(1).toLowerCase());
 
 function chipFor(it) {
   const label = it.variant && !GENERIC_VARIANT.has(it.variant)
@@ -233,7 +249,7 @@ function rowHTML(it) {
   return `<li class="row" data-id="${it.id}">
     <div class="row-main">
       <div class="row-name">${isNew ? '<span class="flag-dot" title="New"></span>' : ''}${esc(it.name)}</div>
-      <div class="row-sub">${solver}<span class="setter">${esc(it.author || 'Unknown setter')}</span><span class="sep">·</span><span>${fmtDate(it.date)}</span></div>
+      <div class="row-sub">${solver}${it.diff ? `<span class="diff" data-d="${esc(it.diff)}">${diffLabel(it.diff)}</span><span class="sep">·</span>` : ''}<span class="setter">${esc(it.author || 'Unknown setter')}</span><span class="sep">·</span><span>${fmtDate(it.date)}</span></div>
     </div>
     <div class="row-right">${chipFor(it)}${icon}</div>
   </li>`;
@@ -267,7 +283,7 @@ async function openPuzzle(id, { push = true } = {}) {
   state.current = it;
   state.scrollY = el.wrap.scrollTop;
   el.pName.textContent = it.name;
-  el.pMeta.textContent = [it.author || 'Unknown setter', it.variant, fmtDate(it.date)].filter(Boolean).join('  ·  ');
+  el.pMeta.textContent = [it.author || 'Unknown setter', it.diff && diffLabel(it.diff), it.variant, fmtDate(it.date)].filter(Boolean).join('  ·  ');
   el.favBtn.classList.toggle('on', favs.has(id));
   el.doneBtn.classList.toggle('on', solved.has(id));
   el.doneBtn.title = solved.has(id) ? 'Solved — tap to undo' : 'Mark solved';
@@ -419,10 +435,11 @@ el.clearQ.addEventListener('click', () => { el.q.value = ''; state.q = ''; apply
 el.status.addEventListener('change', () => { state.status = el.status.value; store.set('f.status', state.status); apply(); });
 el.sort.addEventListener('change', () => { state.sort = el.sort.value; store.set('f.sort', state.sort); apply(); });
 el.author.addEventListener('change', () => { state.author = el.author.value; store.set('f.author', state.author); apply(); });
+el.diff.addEventListener('change', () => { state.diff = el.diff.value; store.set('f.diff', state.diff); apply(); });
 
 function resetFilters() {
-  state.q = ''; state.tags.clear(); state.author = ''; state.status = 'all';
-  store.set('f.tags', []); store.set('f.author', ''); store.set('f.status', 'all');
+  state.q = ''; state.tags.clear(); state.author = ''; state.diff = ''; state.status = 'all';
+  store.set('f.tags', []); store.set('f.author', ''); store.set('f.diff', ''); store.set('f.status', 'all');
   buildChips(); apply();
 }
 el.reset.addEventListener('click', resetFilters);
