@@ -37,6 +37,7 @@ UA = "ctc-sudokus-pwa/1.0 (+https://github.com/M7mdisk/ctc-sudokus; personal puz
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 
+PARSER_VERSION = 3  # bump when detail parsing changes; triggers a targeted refetch
 WORKERS = 4
 MAX_RPS = 6.0  # be a polite guest
 TIMEOUT = 30
@@ -168,7 +169,7 @@ class PuzzleParser(HTMLParser):
 
 HEADLINE = re.compile(r"^Sudoku is (?P<name>.+?) by (?P<author>.+?)(?:, App variant is (?P<variant>.+))?$", re.I)
 SETTER_IN_TITLE = re.compile(r"^(?P<name>.*?)\s*\((?P<author>[^()]+)\)\s*$")
-PAD_URL = re.compile(r"^https?://sudokupad\.app/([A-Za-z0-9]+)$")
+PAD_URL = re.compile(r"^https?://sudokupad\.app/([A-Za-z0-9][A-Za-z0-9._/-]*)")
 RULES_NOISE = re.compile(r"prefer to play directly in sudokupad", re.I)
 
 # Constraint tags inferred from the published rules text. Order matters: earlier
@@ -177,13 +178,13 @@ TAG_RULES: list[tuple[str, re.Pattern]] = [(name, re.compile(pat, re.I)) for nam
     ("fog", r"\bfog\b"),
     ("thermo", r"thermo|bulb"),
     ("arrow", r"\barrows?\b"),
-    ("killer", r"\bkiller\b|\bcages?\b"),
+    ("killer", r"\bkiller\b|cages?[^.]{0,70}sum|sum[^.]{0,70}cages?"),
     ("whisper", r"whisper"),
     ("renban", r"renban"),
     ("palindrome", r"palindrome"),
     ("diagonal", r"diagonal|x-sudoku"),
-    ("little killer", r"little killer"),
-    ("region sum", r"region sum"),
+    ("little-killer", r"little killer"),
+    ("region-sum", r"region sum"),
     ("between", r"between line|\bbetween\b"),
     ("kropki", r"kropki|black dot|white dot"),
     ("xv", r"\bxv\b|v and x\b|sum to (?:10|5)\b"),
@@ -238,7 +239,9 @@ def parse_puzzle(html: str) -> dict:
     if p.iframe:
         pm = PAD_URL.match(p.iframe)
         if pm:
-            pad = pm.group(1)
+            # Drop trailing slashes and any ?setting-... query - the canonical
+            # puzzle URL plays identically and survives query churn upstream.
+            pad = pm.group(1).strip("/") or None
     rules = "\n\n".join(t for t in p.paragraphs if not RULES_NOISE.search(t))
     return {"name": name, "author": author, "variant": variant, "pad": pad, "rules": rules}
 
@@ -269,15 +272,16 @@ def load_previous() -> dict[int, dict]:
     return out
 
 
-def load_progress() -> set[int]:
-    """Ids whose detail page has already been fetched (successfully or not)."""
+def load_progress() -> tuple[set[int], int]:
+    """Ids whose detail page has been fetched, plus the parser version that did it."""
     path = DATA / "progress.json"
     if not path.exists():
-        return set()
+        return set(), 0
     try:
-        return {int(i) for i in json.loads(path.read_text("utf-8")).get("done", [])}
+        blob = json.loads(path.read_text("utf-8"))
+        return {int(i) for i in blob.get("done", [])}, int(blob.get("v", 0))
     except Exception:  # noqa: BLE001
-        return set()
+        return set(), 0
 
 
 def write_progress_files(rules: dict[int, str], progress: set[int]) -> None:
@@ -286,7 +290,7 @@ def write_progress_files(rules: dict[int, str], progress: set[int]) -> None:
         json.dumps({str(k): v for k, v in sorted(rules.items()) if v}, ensure_ascii=False, separators=(",", ":")),
         "utf-8",
     )
-    (DATA / "progress.json").write_text(json.dumps({"done": sorted(progress)}, separators=(",", ":")), "utf-8")
+    (DATA / "progress.json").write_text(json.dumps({"v": PARSER_VERSION, "done": sorted(progress)}, separators=(",", ":")), "utf-8")
 
 
 def write_outputs(rows: list[dict], rules: dict[int, str], progress: set[int]) -> None:
@@ -315,7 +319,7 @@ def write_outputs(rows: list[dict], rules: dict[int, str], progress: set[int]) -
         json.dumps({str(k): v for k, v in sorted(rules.items()) if v}, ensure_ascii=False, separators=(",", ":")),
         "utf-8",
     )
-    (DATA / "progress.json").write_text(json.dumps({"done": sorted(progress)}, separators=(",", ":")), "utf-8")
+    (DATA / "progress.json").write_text(json.dumps({"v": PARSER_VERSION, "done": sorted(progress)}, separators=(",", ":")), "utf-8")
 
 
 
@@ -337,10 +341,17 @@ def main() -> int:
     print(f"index: {len(entries)} puzzles")
 
     previous = {} if args.full else load_previous()
-    progress = set() if args.full else load_progress()
-    # A record written by a partial run can be missing details even though it
-    # exists on disk, so completeness is tracked separately from presence.
-    todo = [e for e in entries if args.full or e["id"] not in progress]
+    progress, stored_version = (set(), 0) if args.full else load_progress()
+
+    def needs_fetch(entry: dict) -> bool:
+        if args.full or entry["id"] not in progress:
+            return True
+        # A partial run can leave a row on disk without its details, and an
+        # older parser version may have missed data (e.g. vanity player URLs).
+        rec = previous.get(entry["id"])
+        return stored_version != PARSER_VERSION and (rec is None or not rec.get("pad"))
+
+    todo = [e for e in entries if needs_fetch(e)]
     print(f"known: {len(previous)} cached, {len(progress)} detailed, {len(todo)} to fetch")
 
     rules: dict[int, str] = {}
@@ -417,7 +428,7 @@ def main() -> int:
             rec["solver"] = rec.get("solver") or entry.get("solver")
             if not rec.get("name"):
                 rec["name"] = entry.get("name") or ""
-            if not rec.get("tags") and rec["id"] in rules:
+            if rec["id"] in rules:
                 rec["tags"] = derive_tags(rules[rec["id"]], rec.get("name"), rec.get("variant"))
             rec["tags"] = rec.get("tags") or []
         rows.append(rec)

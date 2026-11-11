@@ -150,7 +150,7 @@ function passes(it, { ignoreTags = false, ignoreStatus = false } = {}) {
 function buildChips() {
   const counts = tagCounts(true).slice(0, 18);
   el.chips.innerHTML = counts.map(([tag, n]) =>
-    `<button class="chip${state.tags.has(tag) ? ' on' : ''}" data-tag="${esc(tag)}" aria-pressed="${state.tags.has(tag)}">${esc(tag)} <b>${n > 999 ? (n / 1000).toFixed(1) + 'k' : n}</b></button>`
+    `<button class="chip${state.tags.has(tag) ? ' on' : ''}" data-tag="${esc(tag)}" aria-pressed="${state.tags.has(tag)}">${esc(tag.replace(/-/g, ' '))} <b>${n > 999 ? (n / 1000).toFixed(1) + 'k' : n}</b></button>`
   ).join('');
 
   el.chips.querySelectorAll('.chip').forEach((btn) => {
@@ -181,7 +181,6 @@ function syncFilterControls() {
   el.sort.value = state.sort;
   el.author.value = state.author;
   el.clearQ.hidden = !state.q;
-  el.q.value = state.q;
 }
 
 /* ── render ──────────────────────────────────────────────── */
@@ -203,6 +202,15 @@ function apply() {
   syncFilterControls();
   renderChunk();
   el.wrap.scrollTop = 0;
+}
+
+const GENERIC_VARIANT = new Set(['OTHER', 'CLASSIC', 'LINE', 'DOMINO']);
+
+function chipFor(it) {
+  const label = it.variant && !GENERIC_VARIANT.has(it.variant)
+    ? it.variant.toLowerCase()
+    : (it.tags[0] || '');
+  return label ? `<span class="vtag">${esc(label.replace(/-/g, ' '))}</span>` : '';
 }
 
 function rowHTML(it) {
@@ -227,7 +235,7 @@ function rowHTML(it) {
       <div class="row-name">${isNew ? '<span class="flag-dot" title="New"></span>' : ''}${esc(it.name)}</div>
       <div class="row-sub">${solver}<span class="setter">${esc(it.author || 'Unknown setter')}</span><span class="sep">·</span><span>${fmtDate(it.date)}</span></div>
     </div>
-    <div class="row-right">${it.variant ? `<span class="vtag">${esc(it.variant)}</span>` : ''}${icon}</div>
+    <div class="row-right">${chipFor(it)}${icon}</div>
   </li>`;
 }
 
@@ -254,6 +262,7 @@ function findItem(id) { return state.items.find((i) => i.id === id); }
 async function openPuzzle(id, { push = true } = {}) {
   const it = findItem(id);
   if (!it) { toast('Puzzle not found in the index'); return; }
+  if (state.current?.id === id) return;   // already open - never reload the player
 
   state.current = it;
   state.scrollY = el.wrap.scrollTop;
@@ -289,26 +298,32 @@ async function openPuzzle(id, { push = true } = {}) {
   el.player.hidden = false;
   document.body.style.overflow = 'hidden';
 
-  if (push && location.hash !== `#/p/${id}`) history.pushState({ id }, '', `#/p/${id}`);
+  if (push && location.hash !== `#/p/${id}`) {
+    history.pushState({ id }, '', `#/p/${id}`);
+    state.pushed = true;
+  }
 }
 
 function closePuzzle({ fromHistory = false } = {}) {
   if (!state.current) return;
+  const closedId = state.current.id;
   state.current = null;
   el.player.hidden = true;
   el.pad.src = 'about:blank';
   el.rulesSheet.hidden = true;
   document.body.style.overflow = '';
   el.wrap.scrollTop = state.scrollY;
-  if (!fromHistory && location.hash.startsWith('#/p/')) history.replaceState(null, '', location.pathname + location.search);
-  refreshRow();
+  if (!fromHistory && location.hash.startsWith('#/p/')) {
+    history.replaceState(null, '', location.pathname + location.search);
+    state.pushed = false;
+  }
+  refreshRow(closedId);
 }
 
-function refreshRow() {
-  // Cheap targeted refresh: re-render just the visible rows for this puzzle.
+function refreshRow(id) {
+  // Re-render just this puzzle's row so its badges reflect new state.
   for (const li of el.list.querySelectorAll('.row')) {
-    const id = Number(li.dataset.id);
-    if (![Number(state.current?.id)].includes(id)) continue;
+    if (Number(li.dataset.id) !== id) continue;
     const it = findItem(id);
     if (it) li.outerHTML = rowHTML(it);
   }
@@ -329,7 +344,7 @@ async function loadRules(id) {
 }
 
 /* ── player controls ─────────────────────────────────────── */
-$('#backBtn').addEventListener('click', () => history.length > 1 ? history.back() : closePuzzle());
+$('#backBtn').addEventListener('click', () => (state.pushed ? history.back() : closePuzzle()));
 
 el.favBtn.addEventListener('click', () => {
   const id = state.current?.id; if (!id) return;
@@ -431,7 +446,7 @@ themeBtn.addEventListener('click', () => {
 setTheme(store.get('theme', matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
 
 $('#brand').addEventListener('click', () => {
-  if (state.current) history.length > 1 ? history.back() : closePuzzle();
+  if (state.current) state.pushed ? history.back() : closePuzzle();
   el.wrap.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
@@ -443,7 +458,10 @@ document.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const open = !el.player.hidden;
   if (e.key === '/') { e.preventDefault(); el.q.focus(); el.q.select(); }
-  else if (e.key === 'Escape') { if (!el.rulesSheet.hidden) el.rulesSheet.hidden = true; else if (open) history.back(); }
+  else if (e.key === 'Escape') {
+    if (!el.rulesSheet.hidden) el.rulesSheet.hidden = true;
+    else if (open) state.pushed ? history.back() : closePuzzle();
+  }
   else if (e.key === 'r') { if (!el.rulesSheet.hidden) return; $('#randomBtn').click(); }
   else if (e.key === 'f' && open) { el.favBtn.click(); }
   else if (e.key === 's' && open) { el.doneBtn.click(); }

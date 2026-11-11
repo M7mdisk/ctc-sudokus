@@ -45,6 +45,7 @@ html[data-theme="light"] {
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 
 body {
@@ -140,8 +141,9 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .controls { flex: 0 0 auto; padding: 8px 0 6px; border-bottom: 1px solid var(--line); }
 
 .chips {
-  display: flex; gap: 7px; overflow-x: auto; padding: 2px 14px 6px;
+  display: flex; gap: 7px; overflow-x: auto; padding: 2px 22px 6px 14px;
   scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent 100%);
 }
 .chips::-webkit-scrollbar { display: none; }
 
@@ -165,7 +167,10 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 }
 .chip b { font-weight: 600; opacity: .6; font-variant-numeric: tabular-nums; font-size: 11px; }
 
-.selects { display: flex; gap: 7px; padding: 0 14px 2px; overflow-x: auto; scrollbar-width: none; }
+.selects {
+  display: flex; gap: 7px; padding: 0 22px 2px 14px; overflow-x: auto; scrollbar-width: none;
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 18px), transparent 100%);
+}
 .selects::-webkit-scrollbar { display: none; }
 
 .pill {
@@ -297,6 +302,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .site-foot a { color: var(--fg-dim); text-decoration: none; border-bottom: 1px solid var(--line-hi); }
 .site-foot p { margin: 2px 0; }
 .muted { opacity: .65; }
+.key { display: flex; align-items: center; justify-content: center; gap: 5px; opacity: .85; }
+.key .sep { opacity: .4; margin: 0 2px; }
 
 /* ─── Player ─────────────────────────────────────────────── */
 .player {
