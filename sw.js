@@ -1,6 +1,6 @@
 /* Service worker: offline app shell + fresh data when online. */
 
-const VERSION = 'v3';
+const VERSION = 'v4';
 const SHELL = `ctc-shell-${VERSION}`;
 const DATA = `ctc-data-${VERSION}`;
 
