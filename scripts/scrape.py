@@ -295,6 +295,7 @@ def write_progress_files(rules: dict[int, str], progress: set[int]) -> None:
 
 def write_outputs(rows: list[dict], rules: dict[int, str], progress: set[int]) -> None:
     DATA.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     items = [
         [
             r["id"],
@@ -309,11 +310,21 @@ def write_outputs(rows: list[dict], rules: dict[int, str], progress: set[int]) -
         for r in rows
     ]
     blob = {
-        "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "generated": stamp,
         "count": len(items),
         "latest": max((r["date"] or "" for r in rows), default=None),
         "items": items,
     }
+
+    # Don't churn the timestamp (and therefore a git commit) when the content
+    # is byte-identical to what is already published.
+    path = DATA / "puzzles.json"
+    try:
+        old = json.loads(path.read_text("utf-8"))
+        if old.get("items") == items and old.get("latest") == blob["latest"]:
+            blob["generated"] = old.get("generated", stamp)
+    except Exception:  # noqa: BLE001
+        pass
     (DATA / "puzzles.json").write_text(json.dumps(blob, ensure_ascii=False, separators=(",", ":")) + "\n", "utf-8")
     (DATA / "rules.json").write_text(
         json.dumps({str(k): v for k, v in sorted(rules.items()) if v}, ensure_ascii=False, separators=(",", ":")),

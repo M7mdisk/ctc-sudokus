@@ -37,8 +37,37 @@ index.html app.js styles.css sw.js manifest.webmanifest icons/
 variant, SudokuPad id and rules. Runs are incremental — a daily refresh costs
 a couple of HTTP requests when nothing has been published.
 
-`.github/workflows/scrape.yml` runs it daily at 06:17 UTC and pushes if the data
+`scripts/refresh.sh` does the daily scrape + commit; `scripts/github-workflow.yml` is the
+same thing packaged for GitHub Actions.
 changed; GitHub Pages serves `main` from the repository root.
+
+## Refresh automation
+
+Two interchangeable options, both idempotent and silent when nothing changed:
+
+**A. Scheduled job on a host (what is running now)**
+
+```bash
+./scripts/refresh.sh        # scrape -> commit -> push if data changed
+```
+
+Wired to a daily scheduler (cron / Hermes cron). Costs two HTTP requests a day
+when nothing new is published, and prints a one-line digest when a puzzle
+appears.
+
+**B. GitHub Actions (no host needed)**
+
+`scripts/github-workflow.yml` is a ready-made workflow — daily at 06:17 UTC,
+plus a manual `--full` backfill input, with a sanity check that fails the run if
+the puzzle count collapses or a row is malformed. Install it with:
+
+```bash
+mkdir -p .github/workflows && cp scripts/github-workflow.yml .github/workflows/scrape.yml
+```
+
+Pushing files under `.github/workflows/` needs a token with the `workflow`
+scope: `gh auth refresh -s workflow` once, then commit.
+
 
 ## Local development
 
