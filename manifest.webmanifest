@@ -1,0 +1,22 @@
+{
+  "name": "Cryptic Library — Cracking the Cryptic Sudokus",
+  "short_name": "Cryptic Library",
+  "description": "Every sudoku from Cracking the Cryptic in one searchable, installable app. Updated automatically.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0b0d12",
+  "theme_color": "#0d0f14",
+  "categories": ["games", "entertainment", "education"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Random puzzle", "short_name": "Random", "url": "./#random" },
+    { "name": "Favourites", "short_name": "Favourites", "url": "./#fav" }
+  ]
+}
