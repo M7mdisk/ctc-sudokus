@@ -41,7 +41,10 @@ jobs:
           bad = [i for i in items if len(i) < 7]
           assert not bad, f"malformed rows: {bad[:1]}"
           no_pad = sum(1 for i in items if not i[6])
-          print(f"ok: {len(items)} puzzles, latest {blob['latest']}, {no_pad} without a SudokuPad id")
+          rated = sum(1 for i in items if len(i) > 8 and i[8])
+          assert rated > 3000, f"difficulty ratings lost: only {rated} rated"
+          print(f"ok: {len(items)} puzzles, latest {blob['latest']}, "
+                f"{no_pad} without a SudokuPad id, {rated} rated")
           PY
 
       - name: Commit changes
