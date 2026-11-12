@@ -40,37 +40,24 @@ four requests to `/filter?difficultyfilter=…`, one per level, which covers eve
 rated puzzle at once (three puzzles have no rating). Runs are incremental — a
 daily refresh costs six HTTP requests when nothing has been published.
 
-`scripts/refresh.sh` does the daily scrape + commit; `scripts/github-workflow.yml` is the
-same thing packaged for GitHub Actions. GitHub Pages serves `main` from the
-repository root.
+Refresh runs on **GitHub Actions**: `.github/workflows/scrape.yml` — daily at
+06:17 UTC, plus a manual run with a `--full` backfill input. It scrapes, sanity
+checks, commits, and pushes; branch-based Pages redeploys on that commit.
+GitHub Pages serves `main` from the repository root.
 
 ## Refresh automation
 
-Two interchangeable options, both idempotent and silent when nothing changed:
+`.github/workflows/scrape.yml` is the live mechanism — no host required.
 
-**A. Scheduled job on a host (what is running now)**
+- Daily at 06:17 UTC, or on demand from the Actions tab (`--full` refetches every
+  puzzle page, ~15 minutes; the default incremental run is ~6 HTTP requests).
+- The sanity step fails the run (and emails you) if the puzzle count collapses,
+  a row is malformed, or the difficulty ratings disappear.
+- It commits only when data actually changed, so quiet days produce no commits.
 
-```bash
-./scripts/refresh.sh        # scrape -> commit -> push if data changed
-```
-
-Wired to a daily scheduler (cron / Hermes cron). Costs two HTTP requests a day
-when nothing new is published, and prints a one-line digest when a puzzle
-appears.
-
-**B. GitHub Actions (no host needed)**
-
-`scripts/github-workflow.yml` is a ready-made workflow — daily at 06:17 UTC,
-plus a manual `--full` backfill input, with a sanity check that fails the run if
-the puzzle count collapses or a row is malformed. Install it with:
-
-```bash
-mkdir -p .github/workflows && cp scripts/github-workflow.yml .github/workflows/scrape.yml
-```
-
-Pushing files under `.github/workflows/` needs a token with the `workflow`
-scope: `gh auth refresh -s workflow` once, then commit.
-
+`scripts/refresh.sh` does the same thing locally (`scrape -> commit -> push`) for
+manual runs; `scripts/github-workflow.yml` is the source of truth for the
+workflow if you need to reinstall or edit it.
 
 ## Local development
 
